@@ -1,0 +1,16 @@
+[Unit]
+Description=n8n Image to Base64 API
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+WorkingDirectory=/path/to/n8n-image-api
+ExecStart=/usr/bin/node server.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+Environment=PORT=3001
+
+[Install]
+WantedBy=multi-user.target

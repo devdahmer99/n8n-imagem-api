@@ -1,0 +1,86 @@
+{
+  "name": "n8n-image-api",
+  "version": "2.0.0",
+  "description": "Enterprise-grade API for converting image URLs to base64 for n8n workflows",
+  "main": "server.js",
+  "private": true,
+  "author": {
+    "name": "devdahmer99",
+    "email": "devdahmer99@gmail.com",
+    "url": "https://github.com/devdahmer99"
+  },
+  "license": "MIT",
+  "keywords": [
+    "n8n",
+    "image-processing",
+    "base64",
+    "api",
+    "vertex-ai",
+    "automation",
+    "microservice"
+  ],
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  },
+  "scripts": {
+    "start": "NODE_ENV=production node server.js",
+    "dev": "NODE_ENV=development nodemon server.js --watch server.js",
+    "test": "node test.js",
+    "test:verbose": "DEBUG=* node test.js",
+    "health": "curl -f http://localhost:3001/health || exit 1",
+    "build": "echo 'No build step required for Node.js'",
+    "clean": "rm -rf node_modules package-lock.json logs/*.log",
+    "reinstall": "npm run clean && npm install --production",
+    "security-audit": "npm audit --audit-level=high",
+    "lint": "echo 'Linting would go here'",
+    "logs": "tail -f logs/app.log",
+    "restart": "pm2 restart n8n-image-api",
+    "deploy": "bash scripts/deploy.sh",
+    "backup": "bash scripts/backup.sh",
+    "monitor": "pm2 monit"
+  },
+  "dependencies": {
+    "express": "4.18.2",
+    "axios": "1.6.8",
+    "cors": "2.8.5",
+    "helmet": "7.1.0",
+    "morgan": "1.10.0",
+    "compression": "1.7.4",
+    "express-rate-limit": "7.1.5",
+    "winston": "3.11.0",
+    "winston-daily-rotate-file": "4.7.1",
+    "dotenv": "16.3.1",
+    "joi": "17.11.0",
+    "multer": "1.4.5-lts.1"
+  },
+  "devDependencies": {
+    "nodemon": "3.0.2",
+    "pm2": "5.3.0"
+  },
+  "optionalDependencies": {
+    "sharp": "0.32.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/devdahmer99/n8n-image-api.git"
+  },
+  "bugs": {
+    "url": "https://github.com/devdahmer99/n8n-image-api/issues"
+  },
+  "homepage": "https://github.com/devdahmer99/n8n-image-api#readme",
+  "config": {
+    "port": 3001,
+    "maxImageSize": "50MB",
+    "timeout": 30000
+  },
+  "os": [
+    "linux",
+    "darwin",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}
