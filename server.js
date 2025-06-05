@@ -3,18 +3,42 @@ const axios = require('axios');
 const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
+const crypto = require('crypto');
+const multer = require('multer');
 
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middlewares
 app.use(helmet());
 app.use(cors());
 app.use(morgan('combined'));
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
-// Função para converter URL da imagem para base64
+function decryptWhatsappMedia(mediaKeyBase64, encryptedFileBuffer) {
+  // Decodifica a chave de mídia
+  const mediaKey = Buffer.from(mediaKeyBase64, 'base64');
+
+  // Pega o IV (os primeiros 16 bytes)
+  const iv = encryptedFileBuffer.slice(0, 16);
+  
+  // Pega o restante do arquivo para ser o ciphertext
+  // Não vamos mais cortar o final, vamos deixar a biblioteca lidar com isso.
+  const ciphertext = encryptedFileBuffer.slice(16);
+
+  // Cria o decipher. Por padrão, ele já usa o padding correto (PKCS#7).
+  const decipher = crypto.createDecipheriv('aes-256-cbc', mediaKey, iv);
+
+  // Descriptografa. A função .final() vai remover o padding extra automaticamente.
+  const decrypted = Buffer.concat([decipher.update(ciphertext), decipher.final()]);
+
+  return decrypted;
+}
+
+
+
 async function imageUrlToBase64(imageUrl) {
   try {
     const response = await axios({
@@ -26,14 +50,12 @@ async function imageUrlToBase64(imageUrl) {
         'User-Agent': 'Mozilla/5.0 (compatible; n8n-image-api/1.0)',
         'Accept': 'image/*'
       },
-      maxContentLength: 50 * 1024 * 1024, // 50MB max
+      maxContentLength: 50 * 1024 * 1024,
       maxBodyLength: 50 * 1024 * 1024
     });
 
-    // Converte para base64
     const base64String = Buffer.from(response.data).toString('base64');
     
-    // Detecta o tipo MIME
     const contentType = response.headers['content-type'] || 'image/jpeg';
     
     return {
@@ -44,7 +66,6 @@ async function imageUrlToBase64(imageUrl) {
         dataUri: `data:${contentType};base64,${base64String}`,
         originalUrl: imageUrl,
         size: response.data.length,
-        // Formato específico para Vertex AI
         vertexAI: {
           inlineData: {
             mimeType: contentType,
@@ -68,7 +89,39 @@ async function imageUrlToBase64(imageUrl) {
   }
 }
 
-// Endpoint principal para converter imagem
+app.post('/decrypt-whatsapp-image', upload.single('encryptedFile'), async (req, res) => {
+  try {
+    const { mediaKey } = req.body;
+    const encryptedFile = req.file;
+
+    // Validação
+    if (!encryptedFile) {
+      return res.status(400).json({ success: false, error: { message: 'Arquivo .enc (encryptedFile) é obrigatório.', code: 'MISSING_FILE' } });
+    }
+    if (!mediaKey) {
+      return res.status(400).json({ success: false, error: { message: 'Chave de mídia (mediaKey) é obrigatória.', code: 'MISSING_KEY' } });
+    }
+
+    // Chama a função de descriptografia
+    const decryptedImageBuffer = decryptWhatsappMedia(mediaKey, encryptedFile.buffer);
+
+    // Retorna a imagem diretamente!
+    // Assumimos que é JPEG, mas o ideal seria detectar o tipo. Para o WhatsApp, é um bom padrão.
+    res.setHeader('Content-Type', 'image/jpeg');
+    res.send(decryptedImageBuffer);
+
+  } catch (error) {
+    console.error('Erro ao descriptografar imagem:', error);
+    res.status(500).json({
+      success: false,
+      error: {
+        message: 'Falha ao descriptografar o arquivo. Verifique a chave e o arquivo.',
+        code: 'DECRYPTION_FAILED'
+      }
+    });
+  }
+});
+
 app.post('/convert-image', async (req, res) => {
   try {
     const { imageUrl, url } = req.body;
@@ -84,7 +137,6 @@ app.post('/convert-image', async (req, res) => {
       });
     }
 
-    // Valida se é uma URL válida
     try {
       new URL(targetUrl);
     } catch {
@@ -117,7 +169,6 @@ app.post('/convert-image', async (req, res) => {
   }
 });
 
-// Endpoint GET para teste rápido
 app.get('/convert-image', async (req, res) => {
   const { url } = req.query;
   
@@ -140,7 +191,6 @@ app.get('/convert-image', async (req, res) => {
   }
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -149,7 +199,6 @@ app.get('/health', (req, res) => {
   });
 });
 
-// Endpoint de informações
 app.get('/', (req, res) => {
   res.json({
     name: 'n8n Image to Base64 API',
@@ -157,7 +206,8 @@ app.get('/', (req, res) => {
     endpoints: {
       'POST /convert-image': 'Converte URL da imagem para base64',
       'GET /convert-image?url=': 'Converte URL da imagem via GET',
-      'GET /health': 'Health check'
+      'GET /health': 'Health check',
+      'POST /decrypt-whatsapp-image': 'Recebe um arquivo .enc e a media_key para retornar a imagem descriptografada.'
     },
     usage: {
       post: 'POST /convert-image { "imageUrl": "https://exemplo.com/imagem.jpg" }',
@@ -166,7 +216,6 @@ app.get('/', (req, res) => {
   });
 });
 
-// Middleware de erro global
 app.use((err, req, res, next) => {
   console.error('Erro não tratado:', err);
   res.status(500).json({
@@ -178,7 +227,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Middleware para rotas não encontradas
 app.use('*', (req, res) => {
   res.status(404).json({
     success: false,
